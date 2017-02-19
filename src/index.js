@@ -6,12 +6,12 @@ process.on('unhandledRejection', function (reason, p) {
   console.log('Possibly Unhandled Rejection at: Promise', p, 'reason:', reason)
 })
 
-require('./start/config').then(function (config) {
+require('./start/config').then(function (appConfig) {
   Promise.all([
-    require('./start/index-folders')(config)
+    require('./start/index-folders')(appConfig)
   ]).then(() => {
-    require('./start/webserver')(config)
-    require('./start/watch')(config)
+    require('./start/webserver')(appConfig)
+    require('./start/watch')(appConfig)
   }).catch(onError)
 }).catch(onError)
 

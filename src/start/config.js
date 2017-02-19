@@ -5,15 +5,17 @@ const jsonfile = require('jsonfile')
 const Folder = require('../lib/folder')
 const StorageProvider = require('../lib/storage-provider')
 
-const DefaultConfig = {
-  version: 1,
-  serverPort: 55555,
-  folders: [],
-  providers: []
-}
-
 class AppConfig {
-  constructor (json = DefaultConfig) {
+  static get defaults () {
+    return {
+      version: 1,
+      serverPort: 55555,
+      folders: [],
+      providers: []
+    }
+  }
+
+  constructor (json = AppConfig.defaults) {
     this.json = json
 
     if (this.json.version !== 1) {
@@ -74,6 +76,6 @@ module.exports = new Promise((resolve, reject) => {
       config = obj
     }
 
-    resolve(new AppConfig(config || DefaultConfig))
+    resolve(new AppConfig(config || AppConfig.defaults))
   })
 })

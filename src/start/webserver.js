@@ -4,8 +4,8 @@ const connect = require('connect')
 const http = require('http')
 const serveStatic = require('serve-static')
 
-module.exports = function (config) {
-  debug('starting web server at http://localhost:%s', config.serverPort)
+module.exports = function (appConfig) {
+  debug('starting web server at http://localhost:%s', appConfig.serverPort)
   const app = connect()
 
   // parse urlencoded request bodies into req.body
@@ -38,5 +38,5 @@ module.exports = function (config) {
   }))
 
   // create node.js http server and listen on port
-  http.createServer(app).listen(config.serverPort)
+  http.createServer(app).listen(appConfig.serverPort)
 }

@@ -5,9 +5,26 @@ const readline = require('readline')
 const ignoreRules = require('./ignore-rules')
 const Glob = require('glob').Glob
 const File = require('./file')
+const uuid = require('uuid/v4')
 
 class Folder {
-  constructor (obj, appConfig) {
+  static get defaults () {
+    return {
+      id: uuid(),
+      path: '',
+      name: '',
+      providers: {},
+      options: {
+        globalIgnores: true,
+        ignoreHiddenFiles: false,
+        index: true,
+        watch: true,
+        poll: false
+      }
+    }
+  }
+
+  constructor (obj = Folder.defaults, appConfig) {
     this.id = obj.id
     this.path = obj.path
     this.name = obj.name
