@@ -1,0 +1,31 @@
+{
+  "name": "sync",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "aws-sdk": "^2.16.0",
+    "checksum": "^0.1.1",
+    "connect": "^3.6.0",
+    "debug": "^2.6.1",
+    "glob": "^7.1.1",
+    "graceful-fs": "^4.1.11",
+    "imponderous": "0.0.6",
+    "jsonfile": "^2.4.0",
+    "lodash": "^4.17.4",
+    "minimatch": "^3.0.3",
+    "serve-static": "^1.11.2",
+    "watch": "^1.0.2"
+  },
+  "devDependencies": {
+    "eslint-config-standard": "^6.2.1",
+    "eslint-plugin-promise": "^3.4.2",
+    "eslint-plugin-standard": "^2.0.1",
+    "standard": "^8.6.0"
+  }
+}
