@@ -6,6 +6,8 @@ const AWS = require('aws-sdk')
 class BackendS3 extends StorageProvider {
   init () {
     this.config.bucket
+    this.config.encrypt = this.config.encrypt !== false
+    this.config.storageClass = 'standard' // REDUCED_REDUNDANCY | STANDARD_IA
 
     this.s3 = new AWS.S3({
       apiVersion: 'latest',
@@ -24,43 +26,53 @@ class BackendS3 extends StorageProvider {
   syncFile (file, folder) {
     debug('syncing: %s', file.abs)
     return new Promise((resolve, reject) => {
-      Promise.all([
-        file.stat(),
-        file.md5()
-      ]).then(
-        (stats, md5sum) => {
+      Promise.resolve()
+        .then(() => file.stat())
+        .then(() => file.encrypt())
+        .then(() => file.md5(file.stream, 'base64'))
+        .then((md5sum) => {
           debug('md5sum: %s', md5sum)
-          console.log(arguments)
           const params = {
-            Bucket: this.config.bucket,
-            Key: path.join(folder.providers[this.id].path, file.name),
             ACL: 'private',
             Body: file.stream,
-            ContentLength: stats.size,
+            Bucket: this.config.bucket,
+            ContentEncoding: file.encoding,
+            ContentLength: file.tempfile.stats.size,
             ContentMD5: md5sum,
+            ContentType: file.type,
+            Key: path.join(folder.providers[this.id].path, file.name),
             ServerSideEncryption: this.config.encrypt ? 'AES256' : null,
-            StorageClass: 'STANDARD', // REDUCED_REDUNDANCY | STANDARD_IA
+            StorageClass: this.config.storageClass.toUpperCase(),
+
             Metadata: {}
             // ContentDisposition: 'STRING_VALUE',
-            // ContentEncoding: 'STRING_VALUE',
-            // ContentLanguage: 'STRING_VALUE',
-            // ContentType: 'STRING_VALUE',
-            // Expires: new Date || 'Wed Dec 31 1969 16:00:00 GMT-0800 (PST)' || 123456789,
             // Tagging: 'STRING_VALUE',
-            // WebsiteRedirectLocation: 'STRING_VALUE'
           }
 
-          this.s3.putObject(params, function (err, data) {
+          this.s3.putObject(params, (err, data) => {
             if (err) {
-              reject(err)
+              debug('putObject returned an error')
+              this.handleError(err, resolve, reject)
             } else {
+              debug('putObject complete')
               resolve()
             }
           })
-        },
-        (err) => reject(err)
-      )
+        })
+        .catch((err) => reject(err))
     })
+  }
+
+  /**
+   * handleError
+   * Attempt to recover from an error given to us from Amazon S3
+   */
+  handleError (err, resolve, reject) {
+    if (err.code === 'InvalidDigest') {
+      // our md5 checksum did not match what S3 calcualted
+    }
+
+    reject(err)
   }
 }
 

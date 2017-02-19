@@ -10,7 +10,6 @@
   "license": "MIT",
   "dependencies": {
     "aws-sdk": "^2.16.0",
-    "checksum": "^0.1.1",
     "connect": "^3.6.0",
     "debug": "^2.6.1",
     "glob": "^7.1.1",

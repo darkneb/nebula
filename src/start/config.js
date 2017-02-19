@@ -54,7 +54,7 @@ class AppConfig {
   }
 
   get serverPort () {
-    return this.json.serverPort
+    return this.json.serverPort || AppConfig.defaults.serverPort
   }
 }
 

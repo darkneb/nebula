@@ -52,7 +52,10 @@ class FolderWatch {
   }
 
   syncFile (file, stats) {
-    if (this.filter(file, stats)) {
+    if (stats && stats.size === 0) {
+      // skip empty files, as most services will reject it
+      this.debug('ignoring empty file')
+    } else if (this.filter(file, stats)) {
       this.folder.syncFile(file, stats)
     } else {
       this.debug('file ignored due to filters %s', file)

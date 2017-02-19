@@ -15,6 +15,10 @@ class Folder {
       name: '',
       providers: {},
       options: {
+        encrypt: {
+          cipher: 'aes128',
+          key: 'secret'
+        },
         globalIgnores: true,
         ignoreHiddenFiles: false,
         index: true,
@@ -31,6 +35,8 @@ class Folder {
     this.providers = obj.providers || {}
     this.options = {}
     this.appConfig = appConfig
+
+    this.options.encrypt = obj.encrypt || false
 
     /**
      * globalIgnores
