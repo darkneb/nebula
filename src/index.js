@@ -1,4 +1,5 @@
 const debug = require('./lib/debug')(__filename)
+const opener = require('opener')
 
 debug('initializing...')
 
@@ -12,6 +13,11 @@ require('./start/config').then(function (appConfig) {
   ]).then(() => {
     require('./start/webserver')(appConfig)
     require('./start/watch')(appConfig)
+
+    // auto open web browser if we should
+    if (appConfig.serverAutoOpen) {
+      opener('http://' + appConfig.serverHost + ':' + appConfig.serverPort)
+    }
   }).catch(onError)
 }).catch(onError)
 

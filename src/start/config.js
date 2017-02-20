@@ -1,4 +1,5 @@
 const debug = require('../lib/debug')(__filename)
+const _ = require('lodash')
 const os = require('os')
 const path = require('path')
 const jsonfile = require('jsonfile')
@@ -9,14 +10,19 @@ class AppConfig {
   static get defaults () {
     return {
       version: 1,
-      serverPort: 55555,
+      webserver: {
+        port: 55555,
+        host: '127.0.0.1',
+        autoOpen: true
+      },
       folders: [],
       providers: []
     }
   }
 
   constructor (json = AppConfig.defaults) {
-    this.json = json
+    this.json = json || {}
+    _.defaults(this.json, AppConfig.defaults)
 
     if (this.json.version !== 1) {
       throw new Error('Unsupported app config version.\nSupport versions: 1')
@@ -53,8 +59,16 @@ class AppConfig {
     return this.json.providers.map(StorageProvider.fromObject, this)
   }
 
+  get serverHost () {
+    return this.json.webserver.host
+  }
+
   get serverPort () {
-    return this.json.serverPort || AppConfig.defaults.serverPort
+    return this.json.webserver.port
+  }
+
+  get serverAutoOpen () {
+    return this.json.webserver.autoOpen
   }
 }
 
