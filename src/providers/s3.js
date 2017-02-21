@@ -16,19 +16,16 @@ class BackendS3 extends StorageProvider {
       region: this.config.region || 'us-east-1',
       sslEnabled: true,
       computeChecksums: true
-      // credentials: new AWS.Credentials({
-      //   accessKeyId: this.config.key,
-      //   secretAccessKey: this.config.secret
-      // })
     })
   }
 
   syncFile (file, folder) {
-    debug('syncing: %s', file.abs)
     return new Promise((resolve, reject) => {
+      debug('syncing: %s', file.abs)
       Promise.resolve()
         .then(() => file.stat())
-        .then(() => file.encrypt())
+        .then(() => file.getEncryptionKey())
+        .then((encKey) => file.encrypt(encKey))
         .then(() => file.md5(file.stream, 'base64'))
         .then((md5sum) => {
           debug('md5sum: %s', md5sum)
@@ -37,7 +34,7 @@ class BackendS3 extends StorageProvider {
             Body: file.stream,
             Bucket: this.config.bucket,
             ContentEncoding: file.encoding,
-            ContentLength: file.tempfile.stats.size,
+            ContentLength: file.tempfile ? file.tempfile.stats.size : file.stats.size,
             ContentMD5: md5sum,
             ContentType: file.type,
             Key: path.join(folder.providers[this.id].path, file.name),
@@ -49,17 +46,49 @@ class BackendS3 extends StorageProvider {
             // Tagging: 'STRING_VALUE',
           }
 
+          // likely should consider moving to s3.upload for concurrency
+          // or to using MultiPartUploads so we can handle block-based uploads
           this.s3.putObject(params, (err, data) => {
-            if (err) {
-              debug('putObject returned an error')
-              this.handleError(err, resolve, reject)
-            } else {
-              debug('putObject complete')
-              resolve()
-            }
+            file.cleanupTempfile().then(() => {
+              if (err) {
+                debug('putObject returned an error')
+                this.handleError(err, resolve, reject)
+              } else {
+                debug('putObject complete, etag: %s', data.ETag)
+                if (data.VersionId) {
+                  debug('s3 version-id: %s', data.VersionId)
+                }
+                resolve()
+              }
+            })
           })
         })
         .catch((err) => reject(err))
+    })
+  }
+
+  removeFile (file, folder) {
+    return new Promise((resolve, reject) => {
+      debug('removing: %s', file.abs)
+      const params = {
+        Bucket: this.config.bucket,
+        Key: path.join(folder.providers[this.id].path, file.name)
+        // VersionId: 'STRING_VALUE'
+      }
+
+      this.s3.deleteObject(params, (err, data) => {
+        if (err) {
+          debug('deleteObject returned an error')
+          // TODO: handle common delete errors
+          reject(err)
+        } else {
+          debug('deleteObject complete')
+          if (data.VersionId) {
+            debug('s3 version-id: %s', data.VersionId)
+          }
+          resolve()
+        }
+      })
     })
   }
 

@@ -5,7 +5,7 @@ const http = require('http')
 const serveStatic = require('serve-static')
 
 module.exports = function (appConfig) {
-  debug('starting web server at http://localhost:%s', appConfig.serverPort)
+  debug('starting web server at %s', appConfig.serverUri)
   const app = connect()
 
   // parse urlencoded request bodies into req.body
@@ -32,7 +32,7 @@ module.exports = function (appConfig) {
   })
 
   // static files
-  const staticRoot = path.resolve(__dirname, '../../webroot')
+  const staticRoot = path.resolve(__dirname, '../../web/webroot')
   app.use(serveStatic(staticRoot, {
     'index': ['index.html']
   }))

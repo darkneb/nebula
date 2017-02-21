@@ -6,6 +6,8 @@ const jsonfile = require('jsonfile')
 const Folder = require('../lib/folder')
 const StorageProvider = require('../lib/storage-provider')
 
+let masterKey
+
 class AppConfig {
   static get defaults () {
     return {
@@ -22,11 +24,24 @@ class AppConfig {
 
   constructor (json = AppConfig.defaults) {
     this.json = json || {}
-    _.defaults(this.json, AppConfig.defaults)
+    _.defaultsDeep(this.json, AppConfig.defaults)
 
     if (this.json.version !== 1) {
       throw new Error('Unsupported app config version.\nSupport versions: 1')
     }
+
+    this.folders = this.json.folders.map(Folder.fromObject, this)
+    this.providers = this.json.providers.map(StorageProvider.fromObject, this)
+  }
+
+  hashUsingMasterKey () {
+    return masterKey
+  }
+
+  hasArgument (argument) {
+    return process.argv.some(function (arg) {
+      return arg.startsWith('--') && arg === '--' + argument
+    })
   }
 
   getProvidersForFolder (folder) {
@@ -51,14 +66,6 @@ class AppConfig {
     }
   }
 
-  get folders () {
-    return this.json.folders.map(Folder.fromObject, this)
-  }
-
-  get providers () {
-    return this.json.providers.map(StorageProvider.fromObject, this)
-  }
-
   get serverHost () {
     return this.json.webserver.host
   }
@@ -70,26 +77,34 @@ class AppConfig {
   get serverAutoOpen () {
     return this.json.webserver.autoOpen
   }
+
+  get serverUri () {
+    return `http://${this.serverHost}:${this.serverPort}`
+  }
 }
 
-module.exports = new Promise((resolve, reject) => {
-  const configFilePath = path.join(os.homedir(), '.config/syncstuff/config.json')
-  debug('loading config file from %s', configFilePath)
+module.exports = function (mKey) {
+  masterKey = mKey
 
-  jsonfile.readFile(configFilePath, function (err, obj) {
-    let config = null
+  return new Promise((resolve, reject) => {
+    const configFilePath = path.join(os.homedir(), '.config/syncstuff/config.json')
+    debug('loading config from: %s', configFilePath)
 
-    if (err) {
-      if (err.code === 'ENOENT') {
-        debug('missing config.json, will attempt to create one automatically')
+    jsonfile.readFile(configFilePath, function (err, obj) {
+      let config = null
+
+      if (err) {
+        if (err.code === 'ENOENT') {
+          debug('missing config.json, will attempt to create one automatically')
+        } else {
+          console.warn('could not read config file at ~/.transmission-sync/config.json')
+          reject(err)
+        }
       } else {
-        console.warn('could not read config file at ~/.transmission-sync/config.json')
-        reject(err)
+        config = obj
       }
-    } else {
-      config = obj
-    }
 
-    resolve(new AppConfig(config || AppConfig.defaults))
+      resolve(new AppConfig(config || AppConfig.defaults))
+    })
   })
-})
+}

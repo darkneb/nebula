@@ -45,7 +45,7 @@ class File {
     }
   }
 
-  static get tempfile () {
+  static tempfile () {
     const tempfile = '/tmp/syncstuff-temp'
     return {
       path: tempfile,
@@ -76,26 +76,33 @@ class File {
           this.debug('not a file')
           return reject(new Error('Not a file'))
         }
-        this.debug('file stat finsihed')
+        this.debug('stat finished')
         this.stats = stats
         resolve(stats)
       })
     })
   }
 
-  encrypt () {
+  encrypt (encryptionKey) {
     return new Promise((resolve, reject) => {
-      if (!this.folder.options.encrypt) {
+      // if this file is not supposed to be encrypted, just resolve the promise
+      if (!this.folder.useEncryption) {
+        this.debug('encryption is not necessary')
         return resolve()
       }
 
+      // validate encryption key given
+      if (typeof encryptionKey !== 'string' || encryptionKey.length < 30) {
+        return reject(new Error('InvalidEncryptionKey'))
+      }
+
+      this.debug.obfuscate('beginning encryption, with key: %s', encryptionKey)
+
       const algo = this.folder.options.encrypt.cipher || 'aes128'
-      const key = this.folder.options.encrypt.key
-      const cipher = crypto.createCipher(algo, key)
+      const cipher = crypto.createCipher(algo, encryptionKey)
       cipher.setEncoding('base64') // or hex?
 
-      this.tempfile = File.tempfile
-      this.debug('beginning encryption')
+      this.tempfile = File.tempfile()
       this.plainStream.pipe(cipher).pipe(this.tempfile.stream).on('close', () => {
         this.debug('encryption finished')
 
@@ -107,6 +114,42 @@ class File {
           resolve()
         })
       })
+    })
+  }
+
+  getEncryptionKey (encoding = 'hex') {
+    return new Promise((resolve, reject) => {
+      // if this file is not supposed to be encrypted, just resolve the promise
+      if (!this.folder.useEncryption) {
+        return resolve()
+      }
+
+      // derive file-unique encryption key
+      this.folder.getEncryptionKey().then(
+        (secret) => {
+          // validate secret
+          if (typeof secret !== 'string') {
+            return reject(new Error('InvalidEncryptionSecret'))
+          }
+
+          // transform secret into a Buffer
+          this.debug.obfuscate('kdf using secret: %s', secret)
+          secret = Buffer.from(secret)
+
+          // create salt
+          const salt = 'salt'
+          this.debug.obfuscate('kdf using salt  : %s', salt)
+
+          // now derive!
+          crypto.pbkdf2(secret, salt, 100000, 512, 'sha512', (err, key) => {
+            if (err) return reject(err)
+            const encryptionKey = key.toString(encoding)
+            this.debug.obfuscate('derived encryption key: %s', encryptionKey)
+            resolve(encryptionKey)
+          })
+        },
+        (err) => reject(err)
+      )
     })
   }
 
@@ -125,6 +168,20 @@ class File {
       this.debug('checksum: %s', checksum)
     })
     return promise
+  }
+
+  cleanupTempfile () {
+    return new Promise((resolve, reject) => {
+      // if no temp file was used, we have nothing to remove
+      if (!this.tempfile) return resolve()
+
+      // remove the tempfile from disk
+      fs.unlink(this.tempfile.path, () => {
+        // we don't care if this file failed to remove
+        // if (err) return reject(err)
+        resolve()
+      })
+    })
   }
 }
 

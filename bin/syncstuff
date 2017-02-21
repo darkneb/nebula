@@ -1,0 +1,14 @@
+#!/usr/bin/env node
+
+'use strict'
+
+process.title = 'syncstuff'
+
+// startup syncstuff
+let syncstuffpath = '../src/index'
+
+// enable debug mode
+process.env.DEBUG = 'syncstuff*'
+
+// Everything looks good. Require local grunt and run it.
+require(syncstuffpath).cli()

@@ -1,4 +1,5 @@
 const debug = require('../lib/debug')(__filename)
+const FolderIndexer = require('../lib/folder/indexer')
 
 module.exports = function (config) {
   return new Promise((resolve, reject) => {
@@ -7,10 +8,10 @@ module.exports = function (config) {
 
     for (const folder of config.folders) {
       if (folder.options.index) {
-        debug('skipping indexing for: %s', folder.name)
-      } else {
-        debug('indexing fodler: %s', folder.name)
-        promises.push(folder.index())
+        debug('indexing folder: %s', folder.name)
+        promises.push(
+          new FolderIndexer(folder).start()
+        )
       }
     }
 

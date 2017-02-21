@@ -7,6 +7,7 @@ class StorageProvider {
     this.config = obj.config
     this.appConfig = appConfig
     this.debug = require('./debug')(__filename, this.name)
+    this.operationInProgress = false
   }
 
   get name () {

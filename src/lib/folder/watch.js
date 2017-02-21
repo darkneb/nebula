@@ -74,7 +74,12 @@ class FolderWatch {
 
   onFileRemoved (file, stats) {
     this.debug('onFileRemoved: %s', file)
-    this.syncFile(file, stats)
+    console.log(stats)
+    if (this.filter(file, stats)) {
+      this.folder.removeFile(file, stats)
+    } else {
+      this.debug('file ignored due to filters %s', file)
+    }
   }
 }
 

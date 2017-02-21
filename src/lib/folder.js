@@ -1,11 +1,9 @@
 const os = require('os')
-const fs = require('fs')
 const path = require('path')
-const readline = require('readline')
-const ignoreRules = require('./ignore-rules')
-const Glob = require('glob').Glob
-const File = require('./file')
+const fs = require('graceful-fs')
 const uuid = require('uuid/v4')
+const File = require('./file')
+const DB = require('./folder/db')
 
 class Folder {
   static get defaults () {
@@ -14,11 +12,11 @@ class Folder {
       path: '',
       name: '',
       providers: {},
+      encryption: {
+        cipher: 'aes128',
+        key: 'secret'
+      },
       options: {
-        encrypt: {
-          cipher: 'aes128',
-          key: 'secret'
-        },
         globalIgnores: true,
         ignoreHiddenFiles: false,
         index: true,
@@ -35,8 +33,11 @@ class Folder {
     this.providers = obj.providers || {}
     this.options = {}
     this.appConfig = appConfig
+    this.cache = {}
 
-    this.options.encrypt = obj.encrypt || false
+    this.openDatabase()
+
+    this.options.encrypt = obj.encryption || false
 
     /**
      * globalIgnores
@@ -79,6 +80,14 @@ class Folder {
     this.debug('folder instance created for: %s', this.name)
   }
 
+  /**
+   * Return array of storage providers configured with this folder
+   * We do not want to cache this
+   */
+  get storageProviders () {
+    return this.appConfig.getProvidersForFolder(this)
+  }
+
   get abs () {
     // replace ~ with user's home directory
     if (this.path.startsWith('~')) {
@@ -89,127 +98,121 @@ class Folder {
     return this.path
   }
 
-  /**
-   * index
-   * On starting syncstuff, this will index the folder, comparing to the last
-   * known state, looking for anything that has changed to fire off sync events
-   */
-  index () {
-    return new Promise((resolve, reject) => {
-      // first we restore the existing index
-      this.readIndexFile().then(
-        () => {
-          this.glob = new Glob('**/*', this.globOptions)
-          this.glob.on('match', this.onGlobMatch.bind(this))
-          this.glob.on('error', this.onGlobError.bind(this))
-          this.glob.on('end', () => {
-            this.debug('glob search has finished')
-            resolve()
-          })
-        },
-        (err) => reject(err)
-      )
-    })
-  }
-
-  get globOptions () {
-    return {
-      cwd: this.abs,
-
-      // whether the glob should ignore hidden .dot files
-      dot: this.ignoreHiddenFiles === false,
-
-      // follow symblinks
-      follow: true,
-
-      // do not sort, waste of computing
-      nosort: true,
-
-      // report file system errors
-      strict: true,
-
-      // add ignore rules
-      ignore: this.options.globalIgnores ? ignoreRules : []
-    }
+  get databaseLocation () {
+    return path.join(this.abs, '.syncstuff', 'ldb')
   }
 
   /**
-   * onGlobMatch
-   * Called whenever Glob finds a match to a file we want to sync
+   * Resolves an fs.Stats object
+   * @see https://nodejs.org/api/fs.html#fs_class_fs_stats
    */
-  onGlobMatch (filepath) {
-    //
-  }
-
-  get indexFilePath () {
-    return path.join(this.abs, '.syncstuff', 'cache')
-  }
-
-  indexFile () {
+  stat () {
     return new Promise((resolve, reject) => {
-      const indexFilePath = this.indexFilePath
-      this.debug('opening index file: %s', indexFilePath)
-      const stream = fs.createReadStream(indexFilePath)
+      if (this.stats) {
+        this.debug('using known file stats')
+        return resolve(this.stats)
+      }
 
-      stream.on('open', () => {
-        resolve(stream)
-      })
-
-      stream.on('error', (err) => {
-        // if file does not exist, should mean the folder is new to being synced
-        if (err.code === 'ENOENT') {
-          this.debug('index file does not exist')
-          resolve()
-        } else {
-          reject(err)
+      fs.stat(this.abs, (err, stats) => {
+        if (err) return reject(err)
+        if (!stats.isDirectory()) {
+          this.debug('Not a directory')
+          return reject(new Error('Not a directory'))
         }
+        this.debug('stat finished')
+        this.stats = stats
+        resolve(stats)
       })
     })
   }
 
   /**
-   * Opens the index cache that is stored in the folder
+   * Open the existing LevelDB, if available, if not, create it
    */
-  readIndexFile () {
+  openDatabase () {
     return new Promise((resolve, reject) => {
-      this.indexFile().then(
-        (indexFileStream) => {
-          if (indexFileStream == null) {
-            // when stream is null, the index file does not exist
-            this.index = {}
-            this.debug('set index to empty')
-            return resolve()
-          }
+      // if we have a database link, return it as to not open two connections
+      if (this.db) {
+        return resolve(this.db)
+      }
 
-          this.debug('restoring existing index')
+      // verify this folder exists
+      this.stat().then(() => {
+        // verify syncstuff folder exists by trying to create it, if it does
+        // exist, this fails, so we only hit the fs one rather first checking
+        // it exists, then creating it
+        fs.mkdir(path.join(this.abs, '.syncstuff'), '0700', (err) => {
+          // EEXIST means directory exists, we can ignore that
+          if (err && err.code !== 'EEXIST') return reject(err)
 
-          const rl = readline.createInterface({
-            input: indexFileStream
+          this.db = new DB(this)
+
+          this.db.on('ready', () => {
+            this.debug('database is ready!')
+            resolve(this.db)
           })
-
-          rl.on('line', (line) => {
-            this.debug('readIndexFile: readline: reading line')
-            console.log('Line from file:', line)
-          })
-
-          rl.on('close', () => {
-            this.debug('readIndexFile: readline: close')
-            resolve()
-          })
-        },
-        (err) => reject(err)
-      )
+        })
+      })
     })
   }
 
   syncFile (path, stats) {
-    const file = new File(path, stats, this)
-    const providers = this.appConfig.getProvidersForFolder(this)
-    providers.forEach((provider) => {
+    let file
+    if (this.cache[path] == null) {
+      file = new File(path, stats, this)
+      this.cache[path] = file
+    } else {
+      file = this.cache[path]
+      file.stats = stats
+    }
+
+    this.storageProviders.forEach((provider) => {
       provider.syncFile(file, this).catch((err) => {
-        console.log(err)
+        console.log('failed to sync file', err)
       })
     })
+  }
+
+  removeFile (path, stats) {
+    let file
+    if (this.cache[path] == null) {
+      file = new File(path, stats, this)
+      this.cache[path] = file
+    } else {
+      file = this.cache[path]
+      file.stats = stats
+    }
+
+    this.storageProviders.forEach((provider) => {
+      provider.removeFile(file, this).catch((err) => {
+        console.log('failed to remove file', err)
+      })
+    })
+  }
+
+  get useEncryption () {
+    return !!this.options.encrypt
+  }
+
+  getEncryptionKey () {
+    return new Promise((resolve, reject) => {
+      let secret
+
+      // secret is stored in config, encrypted with master key
+
+      if (this.options.encrypt.secret) {
+        secret = this.options.encrypt.secret
+      } else {
+        secret = this.generateKey()
+      }
+
+      resolve(secret)
+    })
+  }
+
+  generateKey () {
+    this.debug('generating encryption key')
+    return 'hello world'
   }
 
   static fromObject (obj) {

@@ -6,6 +6,9 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "bin": {
+    "syncstuff": "bin/syncstuff"
+  },
   "author": "Benjamin Hutchins <ben@hutchins.co>",
   "license": "MIT",
   "dependencies": {
@@ -16,6 +19,7 @@
     "graceful-fs": "^4.1.11",
     "imponderous": "0.0.6",
     "jsonfile": "^2.4.0",
+    "keychain": "^1.2.0",
     "leveldown": "^1.6.0",
     "levelup": "^1.3.3",
     "lodash": "^4.17.4",
