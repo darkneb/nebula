@@ -29,6 +29,7 @@ function main () {
         require('./start/index-folders')(appConfig)
       ]).then(() => {
         require('./start/webserver')(appConfig)
+        require('./start/gitserver')(appConfig)
         require('./start/watch')(appConfig)
 
         // auto open web browser if we should

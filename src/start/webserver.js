@@ -18,6 +18,8 @@ module.exports = function (appConfig) {
     next()
   })
 
+  app.use('/git', require('../lib/routes/git'))
+
   app.use('/config/save', function (req, res) {
     res.end(JSON.stringify({
       success: true
@@ -28,7 +30,8 @@ module.exports = function (appConfig) {
   app.use(function onerror (err, req, res, next) {
     debug('error!')
     console.error(err)
-    res.status(500).end('Unexpected Error')
+    // res.status(500).
+    res.end('Unexpected Error')
   })
 
   // static files

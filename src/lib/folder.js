@@ -3,7 +3,6 @@ const path = require('path')
 const fs = require('graceful-fs')
 const uuid = require('uuid/v4')
 const File = require('./file')
-const DB = require('./folder/db')
 
 class Folder {
   static get defaults () {
@@ -34,8 +33,6 @@ class Folder {
     this.options = {}
     this.appConfig = appConfig
     this.cache = {}
-
-    this.openDatabase()
 
     this.options.encrypt = obj.encryption || false
 
@@ -99,7 +96,7 @@ class Folder {
   }
 
   get databaseLocation () {
-    return path.join(this.abs, '.syncstuff', 'ldb')
+    return path.join(os.homedir(), '.config', 'syncstuff', 'db')
   }
 
   /**
@@ -122,36 +119,6 @@ class Folder {
         this.debug('stat finished')
         this.stats = stats
         resolve(stats)
-      })
-    })
-  }
-
-  /**
-   * Open the existing LevelDB, if available, if not, create it
-   */
-  openDatabase () {
-    return new Promise((resolve, reject) => {
-      // if we have a database link, return it as to not open two connections
-      if (this.db) {
-        return resolve(this.db)
-      }
-
-      // verify this folder exists
-      this.stat().then(() => {
-        // verify syncstuff folder exists by trying to create it, if it does
-        // exist, this fails, so we only hit the fs one rather first checking
-        // it exists, then creating it
-        fs.mkdir(path.join(this.abs, '.syncstuff'), '0700', (err) => {
-          // EEXIST means directory exists, we can ignore that
-          if (err && err.code !== 'EEXIST') return reject(err)
-
-          this.db = new DB(this)
-
-          this.db.on('ready', () => {
-            this.debug('database is ready!')
-            resolve(this.db)
-          })
-        })
       })
     })
   }

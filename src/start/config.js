@@ -24,7 +24,7 @@ class AppConfig {
 
   constructor (json = AppConfig.defaults) {
     this.json = json || {}
-    _.defaultsDeep(this.json, AppConfig.defaults)
+    _.defaultsDeep(this.json, AppConfig.defaults) // TODO: this is the only place using lodash, remove lodash
 
     if (this.json.version !== 1) {
       throw new Error('Unsupported app config version.\nSupport versions: 1')
