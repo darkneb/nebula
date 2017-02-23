@@ -18,6 +18,18 @@ module.exports = function (appConfig) {
     next()
   })
 
+  // git security check, prevent file system traversing
+  app.use(function (req, res, next) {
+    if (req.url.includes('..')) {
+      res.statusCode = 404
+      res.end()
+    } else {
+      next()
+    }
+  })
+
+  // handle other git requests
+  app.use('/git/info/refs', require('../lib/routes/git-info-refs')(appConfig))
   app.use('/git', require('../lib/routes/git'))
 
   app.use('/config/save', function (req, res) {
@@ -30,7 +42,7 @@ module.exports = function (appConfig) {
   app.use(function onerror (err, req, res, next) {
     debug('error!')
     console.error(err)
-    // res.status(500).
+    res.statusCode = 500
     res.end('Unexpected Error')
   })
 

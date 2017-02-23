@@ -1,9 +1,59 @@
-var httpDuplex = require('http-duplex')
-var spawn = require('child_process').spawn
-
+const debug = require('../debug')(__filename)
+const qs = require('querystring')
+const url = require('url')
+const httpDuplex = require('http-duplex')
+const spawn = require('child_process').spawn
 var noCache = require('./utils/no-cache')
 
-module.exports = function (opts, req, res) {
+module.exports = function (appConfig) {
+  return function (req, res) {
+    debug('handler 0')
+
+    if (req.method !== 'GET') {
+      debug('request is not a GET, so cannot be for /info/refs')
+      return false
+    }
+
+    let self = this
+    var u = url.parse(req.url)
+    var m = u.pathname.match(/\/(.+)\/info\/refs$/)
+    if (!m) {
+      debug('request is not for /info/refs')
+      return false
+    }
+    if (/\.\./.test(m[1])) {
+      debug('attempting to traverse file structure')
+      return false
+    }
+
+    var repo = m[1]
+    var params = qs.parse(u.query)
+
+    if (!params.service) {
+      debug('service parameter missing, git over dummy-html is not supported')
+      res.statusCode = 400
+      res.end('service parameter required')
+      return
+    }
+
+    var service = params.service.replace(/^git-/, '')
+    if (self.services.indexOf(service) < 0) {
+      debug('does not support service %s', service)
+      res.statusCode = 405
+      res.end('service not available')
+      return
+    }
+
+    infoResponse({
+      repos: self,
+      repo: repo,
+      service: service
+    }, req, res)
+  }
+}
+
+function infoResponse (opts, req, res) {
+  debug('info response started')
   var self = opts.repos
   var dup = httpDuplex(req, res)
   dup.cwd = self.dirMap(opts.repo)
@@ -20,6 +70,7 @@ module.exports = function (opts, req, res) {
   var anyListeners = self.listeners('info').length > 0
 
   self.exists(opts.repo, function (ex) {
+    debug('exists? %s', ex)
     dup.exists = ex
 
     if (!ex && self.autoCreate) {
@@ -43,9 +94,9 @@ module.exports = function (opts, req, res) {
 
   function next () {
     res.setHeader(
-            'content-type',
-            'application/x-git-' + opts.service + '-advertisement'
-        )
+      'content-type',
+      'application/x-git-' + opts.service + '-advertisement'
+    )
     noCache(res)
     var d = self.dirMap(opts.repo)
     serviceRespond(self, opts.service, d, res)

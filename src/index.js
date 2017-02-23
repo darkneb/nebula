@@ -3,6 +3,11 @@ const path = require('path')
 const fs = require('graceful-fs')
 const opener = require('opener')
 
+const startConfig = require('./start/config')
+const startIndexFolders = require('./start/index-folders')
+const startWebServer = require('./start/webserver')
+const startWatch = require('./start/watch')
+
 function main () {
   debug('initializing...')
 
@@ -17,7 +22,7 @@ function main () {
   // grab your master keys from your system keychain, if we can
   require('./start/keychain').then((masterKey) => {
     // load your app config, decrypting with your master key
-    require('./start/config')(masterKey).then(function (appConfig) {
+    startConfig(masterKey).then(function (appConfig) {
       // catch process exiting, cleanup the database locks
       process.on('exit', onExit.bind(null, appConfig))
       // catch these events that kill the process without triggering the 'exit' event
@@ -26,11 +31,10 @@ function main () {
 
       // continue starting service
       Promise.all([
-        require('./start/index-folders')(appConfig)
+        startIndexFolders(appConfig)
       ]).then(() => {
-        require('./start/webserver')(appConfig)
-        require('./start/gitserver')(appConfig)
-        require('./start/watch')(appConfig)
+        startWebServer(appConfig)
+        startWatch(appConfig)
 
         // auto open web browser if we should
         if (appConfig.serverAutoOpen) {

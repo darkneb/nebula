@@ -9,15 +9,6 @@ var encodings = {
   'deflate': function () { return zlib.createDeflate() }
 }
 
-module.exports = function (opts, req, res) {
-  var service = new Service(opts, req, res)
-
-  Object.keys(opts).forEach(function (key) {
-    service[key] = opts[key]
-  })
-  return service
-}
-
 var headerRE = {
   'receive-pack': '([0-9a-fA-F]+) ([0-9a-fA-F]+)' +
     ' refs/(heads|tags)/(.*?)( |00|\u0000)' +
@@ -155,4 +146,13 @@ Service.prototype.reject = function (code, msg) {
   }
   this.status = 'rejected'
   this.emit('reject', code || 500, msg)
+}
+
+module.exports = function (opts, req, res) {
+  var service = new Service(opts, req, res)
+
+  Object.keys(opts).forEach(function (key) {
+    service[key] = opts[key]
+  })
+  return service
 }
