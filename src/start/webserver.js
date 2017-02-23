@@ -1,12 +1,15 @@
 const debug = require('../lib/debug')(__filename)
 const path = require('path')
-const connect = require('connect')
+const express = require('express')
 const http = require('http')
 const serveStatic = require('serve-static')
 
 module.exports = function (appConfig) {
   debug('starting web server at %s', appConfig.serverUri)
-  const app = connect()
+  const app = express()
+  const staticRoot = path.resolve(__dirname, '../../web/webroot')
+
+  app.use('/web', express.static(staticRoot))
 
   // parse urlencoded request bodies into req.body
   // var bodyParser = require('body-parser');
@@ -19,24 +22,40 @@ module.exports = function (appConfig) {
   })
 
   // git security check, prevent file system traversing
-  app.use(function (req, res, next) {
+  app.use('/git/:repo', function (req, res, next) {
+    req.folderId = req.params.repo.replace(/\.git$/, '')
     if (req.url.includes('..')) {
-      res.statusCode = 404
-      res.end()
+      debug('attempt to traverse file system prevented')
+      res.sendStatus(404).end()
+    } else if (req.method !== 'GET' && req.method !== 'POST') {
+      debug('attempt to use unsupported request method %s', req.method)
+      res.sendStatus(405).end()
+    } else if ((req.folder = appConfig.getFolderById(req.folderId)) == null) {
+      debug('folder does not exist')
+      res.sendStatus(404).end()
     } else {
+      // disable caching for all git responses
+      res.disableCache = function () {
+        res.setHeader('expires', 'Fri, 01 Jan 1980 00:00:00 GMT')
+        res.setHeader('pragma', 'no-cache')
+        res.setHeader('cache-control', 'no-cache, max-age=0, must-revalidate')
+      }
+
+      // let the git handler run
       next()
     }
   })
 
   // handle other git requests
-  app.use('/git/info/refs', require('../lib/routes/git-info-refs')(appConfig))
-  app.use('/git', require('../lib/routes/git'))
+  app.get('/git/:repo/info/refs', require('../lib/routes/git-info-refs')(appConfig))
+  app.get('/git/:repo/HEAD', require('../lib/routes/git-head')(appConfig))
+  app.post('/git/:repo/:service', require('../lib/routes/git-post')(appConfig))
 
-  app.use('/config/save', function (req, res) {
-    res.end(JSON.stringify({
-      success: true
-    }))
-  })
+  // app.use('/config/save', function (req, res) {
+  //   res.end(JSON.stringify({
+  //     success: true
+  //   }))
+  // })
 
   // global error handling
   app.use(function onerror (err, req, res, next) {
@@ -47,11 +66,13 @@ module.exports = function (appConfig) {
   })
 
   // static files
-  const staticRoot = path.resolve(__dirname, '../../web/webroot')
-  app.use(serveStatic(staticRoot, {
-    'index': ['index.html']
-  }))
+  // app.use(serveStatic(staticRoot, {
+  //   'index': ['index.html']
+  // }))
 
   // create node.js http server and listen on port
-  http.createServer(app).listen(appConfig.serverPort)
+  app.listen(appConfig.serverPort, () => {
+    debug('Server is now listening')
+  })
+  // http.createServer(app).listen(appConfig.serverPort)
 }

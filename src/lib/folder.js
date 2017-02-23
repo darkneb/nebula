@@ -3,11 +3,13 @@ const path = require('path')
 const fs = require('graceful-fs')
 const uuid = require('uuid/v4')
 const File = require('./file')
+const Events = require('./events')
+const GitRepo = require('./git-repo')
 
-class Folder {
+class Folder extends Events {
   static get defaults () {
     return {
-      id: uuid(),
+      id: null,
       path: '',
       name: '',
       providers: {},
@@ -26,13 +28,15 @@ class Folder {
   }
 
   constructor (obj = Folder.defaults, appConfig) {
-    this.id = obj.id
+    super()
+    this.id = obj.id || uuid()
     this.path = obj.path
     this.name = obj.name
     this.providers = obj.providers || {}
     this.options = {}
     this.appConfig = appConfig
     this.cache = {}
+    this.git = new GitRepo(this.gitLocation)
 
     this.options.encrypt = obj.encryption || false
 
@@ -95,8 +99,11 @@ class Folder {
     return this.path
   }
 
-  get databaseLocation () {
-    return path.join(os.homedir(), '.config', 'syncstuff', 'db')
+  /**
+   * Return the location the .git repo is located
+   */
+  get gitLocation () {
+    return path.join(os.homedir(), '.config', 'syncstuff', 'repos', this.id)
   }
 
   /**
