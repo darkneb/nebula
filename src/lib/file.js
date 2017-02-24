@@ -2,6 +2,7 @@ const path = require('path')
 const fs = require('graceful-fs')
 const crypto = require('crypto')
 const checksum = require('./file/checksum')
+const uuid = require('uuid/v4')
 
 class File {
   constructor (path, stats, folder) {
@@ -13,6 +14,10 @@ class File {
 
   get abs () {
     return this.path
+  }
+
+  get relative () {
+    return path.relative(this.folder.gitLocation, this.abs)
   }
 
   get name () {
@@ -46,7 +51,7 @@ class File {
   }
 
   static tempfile () {
-    const tempfile = '/tmp/syncstuff-temp'
+    const tempfile = '/tmp/syncstuff-' + uuid()
     return {
       path: tempfile,
       stream: fs.createWriteStream(tempfile, {

@@ -23,11 +23,15 @@ function main () {
   require('./start/keychain').then((masterKey) => {
     // load your app config, decrypting with your master key
     startConfig(masterKey).then(function (appConfig) {
+      // throw a few things into the global process namespace
+      global.appConfig = appConfig
+      global.queue = appConfig.queue
+
       // catch process exiting, cleanup the database locks
-      process.on('exit', onExit.bind(null, appConfig))
+      process.on('exit', onExit)
       // catch these events that kill the process without triggering the 'exit' event
-      process.on('SIGINT', triggerExit.bind(null, appConfig))
-      process.on('uncaughtException', triggerExit.bind(null, appConfig))
+      process.on('SIGINT', triggerExit)
+      process.on('uncaughtException', triggerExit)
 
       // continue starting service
       Promise.all([
@@ -63,17 +67,17 @@ function onExit (appConfig, exitStatus) {
   cleanupAndExit(appConfig, exitStatus)
 }
 
-function triggerExit (appConfig, err) {
+function triggerExit (err) {
   debug('about to trigger exit event')
   if (err) { // this would be an uncaughtException
     console.error(err, err.stack || (new Error()).stack)
   }
-  cleanupAndExit(appConfig, err ? 1 : 0)
+  cleanupAndExit(err ? 1 : 0)
 }
 
-function cleanupAndExit (appConfig, exitStatus) {
+function cleanupAndExit (exitStatus) {
   const promises = []
-  for (const folder of appConfig.folders) {
+  for (const folder of global.appConfig.folders) {
     if (folder.db && folder.db.isOpen()) {
       debug('attempting to close database for %s', folder.name)
       promises.push(folder.db.close())

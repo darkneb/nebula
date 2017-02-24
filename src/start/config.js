@@ -5,6 +5,7 @@ const path = require('path')
 const jsonfile = require('jsonfile')
 const Folder = require('../lib/folder')
 const StorageProvider = require('../lib/storage-provider')
+const Queue = require('../lib/queue')
 
 let masterKey
 
@@ -24,7 +25,7 @@ class AppConfig {
 
   constructor (json = AppConfig.defaults) {
     this.json = json || {}
-    _.defaultsDeep(this.json, AppConfig.defaults) // TODO: this is the only place using lodash, remove lodash
+    _.defaultsDeep(this.json, AppConfig.defaults)
 
     if (this.json.version !== 1) {
       throw new Error('Unsupported app config version.\nSupport versions: 1')
@@ -32,6 +33,7 @@ class AppConfig {
 
     this.folders = this.json.folders.map(Folder.fromObject, this)
     this.providers = this.json.providers.map(StorageProvider.fromObject, this)
+    this.queue = new Queue()
   }
 
   hashUsingMasterKey () {

@@ -1,8 +1,7 @@
 const debug = require('../lib/debug')(__filename)
 const path = require('path')
 const express = require('express')
-const http = require('http')
-const serveStatic = require('serve-static')
+// const http = require('http')
 
 module.exports = function (appConfig) {
   debug('starting web server at %s', appConfig.serverUri)
@@ -10,10 +9,6 @@ module.exports = function (appConfig) {
   const staticRoot = path.resolve(__dirname, '../../web/webroot')
 
   app.use('/web', express.static(staticRoot))
-
-  // parse urlencoded request bodies into req.body
-  // var bodyParser = require('body-parser');
-  // app.use(bodyParser.urlencoded({extended: false}));
 
   // add a simple logger for non-static file requests
   app.use(function (req, res, next) {
@@ -64,11 +59,6 @@ module.exports = function (appConfig) {
     res.statusCode = 500
     res.end('Unexpected Error')
   })
-
-  // static files
-  // app.use(serveStatic(staticRoot, {
-  //   'index': ['index.html']
-  // }))
 
   // create node.js http server and listen on port
   app.listen(appConfig.serverPort, () => {

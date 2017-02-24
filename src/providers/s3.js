@@ -19,6 +19,32 @@ class BackendS3 extends StorageProvider {
     })
   }
 
+  fetch (file, folder) {
+    return new Promise((resolve, reject) => {
+      debug('fetch: %s', file.abs)
+      Promise.resolve()
+        .then(() => file.getEncryptionKey())
+        .then((encKey) => {
+          const params = {
+            Bucket: this.config.bucket,
+            Key: path.join(folder.providers[this.id].path, file.name)
+            // IfModifiedSince: new Date(),
+          }
+
+          this.s3.getObject(params, (err, data) => {
+            if (err) {
+              debug('fetch: failed')
+              return reject(err)
+            }
+
+            console.log(data)
+            resolve(data)
+          })
+        })
+        .catch((err) => reject(err))
+    })
+  }
+
   syncFile (file, folder) {
     return new Promise((resolve, reject) => {
       debug('syncing: %s', file.abs)
@@ -28,7 +54,8 @@ class BackendS3 extends StorageProvider {
         .then((encKey) => file.encrypt(encKey))
         .then(() => file.md5(file.stream, 'base64'))
         .then((md5sum) => {
-          debug('md5sum: %s', md5sum)
+          const key = path.join(folder.providers[this.id].path, file.relative)
+          debug('key: %s, md5sum: %s', key, md5sum)
           const params = {
             ACL: 'private',
             Body: file.stream,
@@ -37,7 +64,7 @@ class BackendS3 extends StorageProvider {
             ContentLength: file.tempfile ? file.tempfile.stats.size : file.stats.size,
             ContentMD5: md5sum,
             ContentType: file.type,
-            Key: path.join(folder.providers[this.id].path, file.name),
+            Key: key,
             ServerSideEncryption: this.config.encrypt ? 'AES256' : null,
             StorageClass: this.config.storageClass.toUpperCase(),
 

@@ -2,7 +2,6 @@ const os = require('os')
 const path = require('path')
 const fs = require('graceful-fs')
 const uuid = require('uuid/v4')
-const File = require('./file')
 const Events = require('./events')
 const GitRepo = require('./git-repo')
 
@@ -36,7 +35,7 @@ class Folder extends Events {
     this.options = {}
     this.appConfig = appConfig
     this.cache = {}
-    this.git = new GitRepo(this.gitLocation)
+    this.git = new GitRepo(this.gitLocation, this.abs)
 
     this.options.encrypt = obj.encryption || false
 
@@ -103,7 +102,7 @@ class Folder extends Events {
    * Return the location the .git repo is located
    */
   get gitLocation () {
-    return path.join(os.homedir(), '.config', 'syncstuff', 'repos', this.id)
+    return path.join(os.homedir(), '.config', 'syncstuff', 'repos', this.id, '.git')
   }
 
   /**
@@ -126,44 +125,6 @@ class Folder extends Events {
         this.debug('stat finished')
         this.stats = stats
         resolve(stats)
-      })
-    })
-  }
-
-  commitChanges (path, stats) {
-    this.git.indexAll()
-  }
-
-  syncFile (path, stats) {
-    let file
-    if (this.cache[path] == null) {
-      file = new File(path, stats, this)
-      this.cache[path] = file
-    } else {
-      file = this.cache[path]
-      file.stats = stats
-    }
-
-    this.storageProviders.forEach((provider) => {
-      provider.syncFile(file, this).catch((err) => {
-        console.log('failed to sync file', err)
-      })
-    })
-  }
-
-  removeFile (path, stats) {
-    let file
-    if (this.cache[path] == null) {
-      file = new File(path, stats, this)
-      this.cache[path] = file
-    } else {
-      file = this.cache[path]
-      file.stats = stats
-    }
-
-    this.storageProviders.forEach((provider) => {
-      provider.removeFile(file, this).catch((err) => {
-        console.log('failed to remove file', err)
       })
     })
   }
