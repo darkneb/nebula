@@ -19,38 +19,8 @@ module.exports = function (appConfig) {
       return res.sendStatus(405).end()
     }
 
-    // // find the folder for this repo
-    // const folder = appConfig.getFolderById(repo)
-    // 
-    // if (folder == null) {
-    //   debug('folder does not exist')
-    //   res.statusCode = 404
-    //   res.end('Folder not found')
-    //   return
-    // }
-
     debug('info response started for folder %s', req.folder.name)
     debug('git repo expected at %s', req.folder.gitLocation)
-
-    // if the git repo does not exist, create it
-    // if (!ex && self.autoCreate) {
-    //   dup.once('accept', function () {
-    //     self.create(opts.repo, next)
-    //   })
-    // 
-    //   self.emit('info', dup)
-    //   if (!anyListeners) dup.accept()
-    // }
-
-    // if the git repo does not exist
-    // if (!ex) {
-    //   res.statusCode = 404
-    //   res.setHeader('content-type', 'text/plain')
-    //   res.end('repository not found')
-    // }
-
-    // trigger event letting listeners know that info/refs has been request
-    // req.folder.git.emit('info', req, res)
 
     res.setHeader('content-type', 'application/x-git-' + service + '-advertisement')
     res.disableCache()
@@ -69,7 +39,7 @@ module.exports = function (appConfig) {
       // ))
     })
 
-    ps.on('close', function () {
+    ps.on('close', function (exitCode) {
       debug('process ended')
       console.log(arguments)
     })

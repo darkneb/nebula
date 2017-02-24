@@ -6,13 +6,10 @@ const zlib = require('zlib')
 
 module.exports = function (appConfig) {
   return function (req, res) {
-    debug('request %s: %s', req.method, req.url)
-
+    // verify we support this git service
     let service = req.params.service.replace(/^git-/, '')
-    debug('repo %s, service %s', req.params.repo, service)
-
     if (GitRepo.supportedServices.indexOf(service) < 0) {
-      debug('git service requested %s is unsupported', service)
+      debug('git service requested "%s" is unsupported', service)
       return res.sendStatus(405).end()
     }
 

@@ -1,9 +1,8 @@
 const debug = require('./debug')(__filename)
-const fs = require('graceful-fs')
-const path = require('path')
 const mkdirp = require('mkdirp')
 const nodegit = require('nodegit')
 const Events = require('./events')
+const spawn = require('child_process').spawn
 
 class Git extends Events {
   constructor (repoLocation) {
@@ -12,26 +11,11 @@ class Git extends Events {
     this.baseGitRepo = false
   }
 
-  exists (repo, cb) {
-    (fs.exists || path.exists)(this.repoLocation, cb)
-  }
-
-  mkdir (dir, cb) {
-    mkdirp(this.repoLocation, cb)
-  }
-
   create (repo, cb) {
     return new Promise((resolve, reject) => {
-      this.exists(repo, (ex) => {
-        if (!ex) {
-          this.mkdir(repo, next)
-        } else {
-          next()
-        }
-      })
-
-      var next = function (err) {
+      mkdirp(this.repoLocation, (err) => {
         if (err) {
+          debug('failed to create repo directory')
           return cb(err)
         }
 
@@ -43,7 +27,50 @@ class Git extends Events {
           },
           (err) => cb(err)
         )
-      }.bind(this)
+      })
+    })
+  }
+
+  /**
+   * Stage all changes
+   */
+  indexAll () {
+    return new Promise((resolve, reject) => {
+      let args = [ '--git-dir', this.repoLocation, '-C', this.folder.abs, 'add', '--all' ]
+      let cmd = spawn('git', args)
+
+      cmd.on('error', function (err) {
+        debug('git threw an error')
+        debug(err)
+        reject(err)
+      })
+
+      cmd.on('close', function (exitCode) {
+        debug('process ended')
+        resolve()
+      })
+
+      // ps.stdout.pipe(res)
+    })
+  }
+
+  commit (message) {
+    return new Promise((resolve, reject) => {
+      let args = [ '--git-dir', this.repoLocation, '-C', this.folder.abs, 'commit', '-m', message ]
+      let cmd = spawn('git', args)
+
+      cmd.on('error', function (err) {
+        debug('git threw an error')
+        debug(err)
+        reject(err)
+      })
+
+      cmd.on('close', function (exitCode) {
+        debug('process ended')
+        resolve()
+      })
+
+      // ps.stdout.pipe(res)
     })
   }
 

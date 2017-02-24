@@ -130,6 +130,10 @@ class Folder extends Events {
     })
   }
 
+  commitChanges (path, stats) {
+    this.git.indexAll()
+  }
+
   syncFile (path, stats) {
     let file
     if (this.cache[path] == null) {

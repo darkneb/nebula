@@ -64,17 +64,18 @@ class FolderWatch {
 
   onFileCreated (file, stats) {
     this.debug('onFileCreated: %s', file)
-    this.syncFile(file, stats)
+    // this.syncFile(file, stats)
+    this.commitChanges(file, stats)
   }
 
   onFileChanged (file, curr, prev) {
     this.debug('onFileChanged: %s', file)
-    this.syncFile(file)
+    // this.syncFile(file)
+    this.commitChanges(file)
   }
 
   onFileRemoved (file, stats) {
     this.debug('onFileRemoved: %s', file)
-    console.log(stats)
     if (this.filter(file, stats)) {
       this.folder.removeFile(file, stats)
     } else {
