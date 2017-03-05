@@ -3,6 +3,7 @@ const _ = require('lodash')
 const os = require('os')
 const path = require('path')
 const jsonfile = require('jsonfile')
+const cfs = require('../lib/cfs')
 const Folder = require('../lib/folder')
 const StorageProvider = require('../lib/storage-provider')
 const Queue = require('../lib/queue')
@@ -66,6 +67,18 @@ class AppConfig {
         return provider
       }
     }
+  }
+
+  save () {
+    return new Promise((resolve, reject) => {
+      // create the JSON object we'll be saving
+
+      // save the config, first to a secondary file,
+      // then we will replace the original. This way
+      // we never risk losing encryption keys
+
+      cfs.writeFile()
+    })
   }
 
   get serverHost () {

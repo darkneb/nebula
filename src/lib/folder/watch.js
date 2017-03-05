@@ -41,7 +41,7 @@ class FolderWatch {
    * On a file change, we commit the changes to git repo
    */
   start () {
-    const path = this.folder.abs
+    const path = this.folder.location
     this.debug('starting to watch: %s', path)
 
     if (this.folder.options.globalIgnores) {

@@ -4,9 +4,10 @@ const fs = require('graceful-fs')
 const opener = require('opener')
 
 const startConfig = require('./start/config')
-const startIndexFolders = require('./start/index-folders')
+// const startIndexFolders = require('./start/index-folders')
 const startWebServer = require('./start/webserver')
-const startWatch = require('./start/watch')
+// const startWatch = require('./start/watch')
+const FolderWatch = require('./lib/folder/watch')
 
 function main () {
   debug('initializing...')
@@ -33,18 +34,36 @@ function main () {
       process.on('SIGINT', triggerExit)
       process.on('uncaughtException', triggerExit)
 
-      // continue starting service
-      Promise.all([
-        startIndexFolders(appConfig)
-      ]).then(() => {
-        startWebServer(appConfig)
-        startWatch(appConfig)
+      // startup web server
+      startWebServer(appConfig)
 
-        // auto open web browser if we should
-        if (appConfig.serverAutoOpen) {
-          opener(appConfig.serverUri)
-        }
-      }).catch(triggerExit.bind(null, appConfig))
+      // start health checking folders
+      for (const folder of appConfig.folders) {
+        folder.healthCheck().then(
+          () => {
+            debug('health checks passed for folder: %s', folder.name)
+            // index folder
+            // if (folder.options.index) {
+            //   new FolderIndexer(folder).start()
+            // }
+
+            // start watching folder
+            if (folder.options.watch) {
+              debug('starting watch of folder: %s', folder.name)
+              folder.watch = new FolderWatch(folder).start()
+            }
+          },
+          (err) => {
+            debug('Health checks failed for folder: %', folder.name)
+            console.error(err)
+          }
+        )
+      }
+
+      // auto open web browser if we should
+      if (appConfig.serverAutoOpen) {
+        opener(appConfig.serverUri)
+      }
     }).catch(onError)
   }).catch(onError)
 }

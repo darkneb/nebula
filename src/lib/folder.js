@@ -5,6 +5,11 @@ const uuid = require('uuid/v4')
 const Events = require('./events')
 const GitRepo = require('./git-repo')
 
+const FolderStatus = {
+  Indexing: 'INDEXING',
+  NoGitRepo: 'NOGITREPO'
+}
+
 class Folder extends Events {
   static get defaults () {
     return {
@@ -35,7 +40,8 @@ class Folder extends Events {
     this.options = {}
     this.appConfig = appConfig
     this.cache = {}
-    this.git = new GitRepo(this.gitLocation, this.abs)
+    this.status = FolderStatus.Indexing
+    this.git = new GitRepo(this.gitLocation, this.location)
 
     this.options.encrypt = obj.encryption || false
 
@@ -88,7 +94,7 @@ class Folder extends Events {
     return this.appConfig.getProvidersForFolder(this)
   }
 
-  get abs () {
+  get location () {
     // replace ~ with user's home directory
     if (this.path.startsWith('~')) {
       return path.join(os.homedir(), this.path.substr(1))
@@ -108,15 +114,17 @@ class Folder extends Events {
   /**
    * Resolves an fs.Stats object
    * @see https://nodejs.org/api/fs.html#fs_class_fs_stats
+   *
+   * @param {boolean} force Force a stat, even if stats are cached
    */
-  stat () {
+  stat (force) {
     return new Promise((resolve, reject) => {
-      if (this.stats) {
+      if (this.stats && force !== true) {
         this.debug('using known file stats')
         return resolve(this.stats)
       }
 
-      fs.stat(this.abs, (err, stats) => {
+      fs.stat(this.location, (err, stats) => {
         if (err) return reject(err)
         if (!stats.isDirectory()) {
           this.debug('Not a directory')
@@ -138,11 +146,13 @@ class Folder extends Events {
       let secret
 
       // secret is stored in config, encrypted with master key
-
-      if (this.options.encrypt.secret) {
-        secret = this.options.encrypt.secret
+      if (this.options.encryption.secret) {
+        secret = this.options.encryption.secret
       } else {
-        secret = this.generateKey()
+        this.options.encryption.secret = this.generateKey()
+
+        // save this key now that we generated it
+        global.appConfig.save()
       }
 
       resolve(secret)
@@ -152,6 +162,34 @@ class Folder extends Events {
   generateKey () {
     this.debug('generating encryption key')
     return 'hello world'
+  }
+
+  setStatus (status) {
+    this.status = status
+    this.emit('status', this)
+  }
+
+  healthCheck () {
+    return new Promise((resolve, reject) => {
+      // verify the folder exists
+      this.stat().then(
+        (stats) => {
+          // verify the .git repo exists
+          fs.stat(this.gitLocation, (err, stats) => {
+            if (err) {
+              this.setStatus(FolderStatus.NoGitRepo)
+              return reject(err)
+            }
+
+            resolve()
+          })
+        },
+        (err) => {
+          this.setStatus(FolderStatus.Paused)
+          return reject(err)
+        }
+      )
+    })
   }
 
   static fromObject (obj) {

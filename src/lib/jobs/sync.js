@@ -10,18 +10,15 @@ class SyncJob {
     this.referenceFileObj = new File(this.ref, null, this.folder)
   }
 
-  run (resolve, reject) {
-    this.walk().then(
-      () => {
+  run () {
+    return new Promise((resolve, reject) => {
+      this.walk().then(() => {
         Promise.all(this.processStorageProviders()).then(
-          () => {
-            resolve()
-          },
+          () => resolve(),
           (err) => reject(err)
         )
-      },
-      (err) => reject(err)
-    )
+      }).catch((err) => reject(err))
+    })
   }
 
   walk () {
@@ -30,7 +27,8 @@ class SyncJob {
     return walk(objectsDir).then(
       (files) => {
         this.files = files
-        this.files[this.ref] = null
+        this.files[ path.join(this.folder.gitLocation, this.ref) ] = null
+        return this.files
       }
     )
   }
@@ -118,6 +116,6 @@ module.exports = function (job) {
       return reject(new Error('folder not found: ' + folderId))
     }
 
-    new SyncJob(folder).run(resolve, reject)
+    new SyncJob(folder).run().then(resolve, reject)
   })
 }
