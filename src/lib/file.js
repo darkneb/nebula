@@ -1,27 +1,40 @@
 const path = require('path')
 const fs = require('graceful-fs')
-const crypto = require('crypto')
 const checksum = require('./file/checksum')
-const uuid = require('uuid/v4')
+const Encryptor = require('./file/encryptor')
 
-class File {
-  constructor (path, stats, folder) {
-    this.path = path
+class File extends Encryptor {
+  constructor (location, stats, folder, provider) {
+    super()
+
+    if (!path.isAbsolute(location)) {
+      throw new Error('Location is not absolute! ' + location)
+    }
+
+    this._location = location
     this.stats = stats
     this.folder = folder
+    this.provider = provider
     this.debug = require('./debug')(__filename, this.name)
   }
 
-  get abs () {
-    return this.path
+  // returns the absolute location of the non-encrypted file
+  get location () {
+    return this._location
   }
 
+  // returns the object key that should be used by storage providers
+  get key () {
+    return path.join(this.folder.get(['providers', this.provider.get('id'), 'path']), this.relative)
+  }
+
+  // returns the file's relative path to the .git folder
   get relative () {
-    return path.relative(this.folder.gitLocation, this.abs)
+    return path.relative(this.folder.gitLocation, this.location)
   }
 
   get name () {
-    return path.basename(this.path)
+    return path.basename(this.location)
   }
 
   get ext () {
@@ -38,30 +51,29 @@ class File {
     // return this.folder.options.encrypt ? 'utf8' : 'utf8'
   }
 
-  get plainStream () {
-    return fs.createReadStream(this.abs)
+  get size () {
+    return this.tempfile ? this.tempfile.stats.size : this.stats.size
+  }
+
+  get readStream () {
+    return fs.createReadStream(this.location)
+  }
+
+  tempWriteStream () {
+    return this.tempfile.writeStream
   }
 
   get stream () {
     if (this.tempfile) {
-      return this.tempfile.read()
+      return this.tempfile.readStream
     } else {
-      return this.plainStream
+      return this.readStream
     }
   }
 
-  static tempfile () {
-    const tempfile = '/tmp/syncstuff-' + uuid()
-    return {
-      path: tempfile,
-      stream: fs.createWriteStream(tempfile, {
-        // flags: RDWR_EXCL,
-        mode: '0600'
-      }),
-      read () {
-        return fs.createReadStream(tempfile)
-      }
-    }
+  // returns whether this file will be encrypted before being uploaded
+  get encrypted () {
+    return this.folder.useEncryptionForProvider(this.provider)
   }
 
   /**
@@ -75,7 +87,7 @@ class File {
         return resolve(this.stats)
       }
 
-      fs.stat(this.abs, (err, stats) => {
+      fs.stat(this.location, (err, stats) => {
         if (err) return reject(err)
         if (!stats.isFile()) {
           this.debug('not a file')
@@ -88,104 +100,17 @@ class File {
     })
   }
 
-  encrypt (encryptionKey) {
-    return new Promise((resolve, reject) => {
-      // if this file is not supposed to be encrypted, just resolve the promise
-      if (!this.folder.useEncryption) {
-        this.debug('encryption is not necessary')
-        return resolve()
-      }
-
-      // validate encryption key given
-      if (typeof encryptionKey !== 'string' || encryptionKey.length < 30) {
-        return reject(new Error('InvalidEncryptionKey'))
-      }
-
-      this.debug.obfuscate('beginning encryption, with key: %s', encryptionKey)
-
-      const algo = this.folder.options.encrypt.cipher || 'aes128'
-      const cipher = crypto.createCipher(algo, encryptionKey)
-      cipher.setEncoding('base64') // or hex?
-
-      this.tempfile = File.tempfile()
-      this.plainStream.pipe(cipher).pipe(this.tempfile.stream).on('close', () => {
-        this.debug('encryption finished')
-
-        // stat the completed enctypted file, so we can get the file length
-        fs.stat(this.tempfile.path, (err, stats) => {
-          this.debug('encrypted temp file stated')
-          if (err) return resolve(err)
-          this.tempfile.stats = stats
-          resolve()
-        })
-      })
-    })
+  checksum (algorithm, encoding, stream = this.stream) {
+    return checksum(stream, algorithm, encoding)
   }
 
-  getEncryptionKey (encoding = 'hex') {
-    return new Promise((resolve, reject) => {
-      // if this file is not supposed to be encrypted, just resolve the promise
-      if (!this.folder.useEncryption) {
-        return resolve()
-      }
-
-      // derive file-unique encryption key
-      this.folder.getEncryptionKey().then(
-        (secret) => {
-          // validate secret
-          if (typeof secret !== 'string') {
-            return reject(new Error('InvalidEncryptionSecret'))
-          }
-
-          // transform secret into a Buffer
-          this.debug.obfuscate('kdf using secret: %s', secret)
-          secret = Buffer.from(secret)
-
-          // create salt
-          const salt = 'salt'
-          this.debug.obfuscate('kdf using salt  : %s', salt)
-
-          // now derive!
-          crypto.pbkdf2(secret, salt, 100000, 512, 'sha512', (err, key) => {
-            if (err) return reject(err)
-            const encryptionKey = key.toString(encoding)
-            this.debug.obfuscate('derived encryption key: %s', encryptionKey)
-            resolve(encryptionKey)
-          })
-        },
-        (err) => reject(err)
-      )
-    })
-  }
-
-  md5 (stream, encoding) {
-    return this.checksum('md5', stream, encoding)
-  }
-
-  sha1 (stream, encoding) {
-    return this.checksum('sha1', stream)
-  }
-
-  checksum (algorithm, stream = this.plainStream, encoding) {
-    this.debug('creating checksum using algo: %s', algorithm)
-    let promise = checksum(stream, algorithm, encoding)
-    promise.then((checksum) => {
-      this.debug('checksum: %s', checksum)
-    })
-    return promise
-  }
-
-  cleanupTempfile () {
+  cleanup () {
     return new Promise((resolve, reject) => {
       // if no temp file was used, we have nothing to remove
       if (!this.tempfile) return resolve()
 
-      // remove the tempfile from disk
-      fs.unlink(this.tempfile.path, () => {
-        // we don't care if this file failed to remove
-        // if (err) return reject(err)
-        resolve()
-      })
+      // if there was a temo file, remove it
+      this.tempfile.remove().then(resolve, reject)
     })
   }
 }

@@ -48,7 +48,7 @@ function main () {
             // }
 
             // start watching folder
-            if (folder.options.watch) {
+            if (folder.ifOption('watch')) {
               debug('starting watch of folder: %s', folder.name)
               folder.watch = new FolderWatch(folder).start()
             }

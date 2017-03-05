@@ -1,8 +1,7 @@
 const os = require('os')
 const path = require('path')
 const fs = require('graceful-fs')
-const uuid = require('uuid/v4')
-const Events = require('./events')
+const BaseClass = require('./base-class')
 const GitRepo = require('./git-repo')
 
 const FolderStatus = {
@@ -10,105 +9,104 @@ const FolderStatus = {
   NoGitRepo: 'NOGITREPO'
 }
 
-class Folder extends Events {
+const DEFAULT_CIPHER = 'aes128'
+
+class Folder extends BaseClass {
   static get defaults () {
     return {
       id: null,
-      path: '',
-      name: '',
-      providers: {},
-      encryption: {
-        cipher: 'aes128',
-        key: 'secret'
-      },
-      options: {
-        globalIgnores: true,
-        ignoreHiddenFiles: false,
-        index: true,
-        watch: true,
-        poll: false
-      }
+      location: null,
+      name: null,
+      providers: {}
     }
   }
 
-  constructor (obj = Folder.defaults, appConfig) {
-    super()
-    this.id = obj.id || uuid()
-    this.path = obj.path
-    this.name = obj.name
-    this.providers = obj.providers || {}
-    this.options = {}
-    this.appConfig = appConfig
-    this.cache = {}
+  static get defaultOptions () {
+    return {
+      /**
+       * globalIgnores
+       * Whether to use global ignore rules to filter out files best left unsynced
+       */
+      globalIgnores: true,
+
+      /**
+       * ignoreHiddenFiles
+       * Optionally can ignore hidden files when syncing
+       */
+      ignoreHiddenFiles: false,
+
+      /**
+       * index
+       * When set to true, syncstuff will look for changes to files being
+       * synced on startup of the service.
+       * When a folder is larger, this option can be used to skip indexing
+       * on bootup. It will then only reindex when manually requested, and
+       * catch future file changes while syncstuff is running.
+       */
+      index: true,
+
+      /**
+       * watch
+       * Whether we should watch the folder for file system modifications.
+       * If a folder is larger enough, this might cause poor performance.
+       * In which case, disable this, and use polling
+       */
+      watch: true,
+
+      /**
+       * poll
+       * As an alternative to file system watching, we can poll looking for
+       * changes to files. This can only be used when watching is disabled.
+       */
+      poll: false
+    }
+  }
+
+  constructor (values) {
+    super(values)
     this.status = FolderStatus.Indexing
     this.git = new GitRepo(this.gitLocation, this.location)
-
-    this.options.encrypt = obj.encryption || false
-
-    /**
-     * globalIgnores
-     * Whether to use global ignore rules to filter out files best left unsynced
-     */
-    this.options.globalIgnores = obj.globalIgnores !== false
-
-    /**
-     * ignoreHiddenFiles
-     * Optionally can ignore hidden files when syncing
-     */
-    this.options.ignoreHiddenFiles = !!obj.ignoreHiddenFiles
-
-    /**
-     * index
-     * When set to true, syncstuff will look for changes to files being
-     * synced on startup of the service.
-     * When a folder is larger, this option can be used to skip indexing
-     * on bootup. It will then only reindex when manually requested, and
-     * catch future file changes while syncstuff is running.
-     */
-    this.options.index = obj.index !== false
-
-    /**
-     * watch
-     * Whether we should watch the folder for file system modifications.
-     * If a folder is larger enough, this might cause poor performance.
-     * In which case, disable this, and use polling
-     */
-    this.options.watch = obj.watch !== false
-
-    /**
-     * poll
-     * As an alternative to file system watching, we can poll looking for
-     * changes to files. This can only be used when watching is disabled.
-     */
-    this.options.poll = this.watch ? false : !!obj.poll
-
     this.debug = require('./debug')(__filename, this.name)
-    this.debug('folder instance created for: %s', this.name)
   }
+
+  // toJSON () {
+  //   let json = super()
+  //   // let json = {
+  //   //   provider: this.providers,
+  //   //   options: Object.assign({}, this.options)
+  //   // }
+  //   return json
+  // }
 
   /**
    * Return array of storage providers configured with this folder
    * We do not want to cache this
    */
   get storageProviders () {
-    return this.appConfig.getProvidersForFolder(this)
+    return global.appConfig.getProvidersForFolder(this)
+  }
+
+  get name () {
+    return this.get('name') || this.get('id')
   }
 
   get location () {
+    let location = this.get('location')
+
     // replace ~ with user's home directory
-    if (this.path.startsWith('~')) {
-      return path.join(os.homedir(), this.path.substr(1))
+    if (location.startsWith('~')) {
+      return path.join(os.homedir(), location.substr(1))
     }
 
     // otherwise return the path
-    return this.path
+    return location
   }
 
   /**
    * Return the location the .git repo is located
    */
   get gitLocation () {
-    return path.join(os.homedir(), '.config', 'syncstuff', 'repos', this.id, '.git')
+    return path.join(os.homedir(), '.config', 'syncstuff', 'repos', this.get('id'), '.git')
   }
 
   /**
@@ -137,31 +135,53 @@ class Folder extends Events {
     })
   }
 
-  get useEncryption () {
-    return !!this.options.encrypt
+  /**
+   * Whether this folder is using encryption
+   */
+  useEncryptionForProvider (provider) {
+    return !!this.get(['providers', provider.get('id'), 'encryption'])
   }
 
-  getEncryptionKey () {
+  getCipher (provider) {
+    const configKey = ['providers', provider.get('id'), 'encryption', 'cipher']
+    let cipher = this.get(configKey)
+    if (typeof cipher === 'string') {
+      return cipher
+    } else {
+      this.set(configKey, DEFAULT_CIPHER)
+      return DEFAULT_CIPHER
+    }
+  }
+
+  getEncryptionKey (provider) {
     return new Promise((resolve, reject) => {
-      let secret
+      let save = false
+      let configKey = ['providers', provider.get('id'), 'encryption']
+      let encryption = this.get(configKey) || {}
 
-      // secret is stored in config, encrypted with master key
-      if (this.options.encryption.secret) {
-        secret = this.options.encryption.secret
-      } else {
-        this.options.encryption.secret = this.generateKey()
-
-        // save this key now that we generated it
-        global.appConfig.save()
+      if (!encryption.cipher) {
+        encryption.cipher = DEFAULT_CIPHER
+        save = true
       }
 
-      resolve(secret)
+      if (!encryption.key) {
+        encryption.key = this.generateKey(provider)
+        save = true
+      }
+
+      // save this key now that we generated it
+      if (save) {
+        this.set(configKey, encryption)
+      }
+
+      resolve(encryption.key)
     })
   }
 
-  generateKey () {
-    this.debug('generating encryption key')
-    return 'hello world'
+  generateKey (provider) {
+    const key = require('crypto').randomBytes(64).toString('base64')
+    this.debug.obfuscate('generated encryption key: %s', key)
+    return key
   }
 
   setStatus (status) {
@@ -193,7 +213,7 @@ class Folder extends Events {
   }
 
   static fromObject (obj) {
-    return new Folder(obj, this)
+    return new Folder(obj)
   }
 }
 

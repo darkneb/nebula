@@ -24,7 +24,8 @@ class AppConfig {
     }
   }
 
-  constructor (json = AppConfig.defaults) {
+  constructor (json = AppConfig.defaults, configFileLocation) {
+    this.location = configFileLocation
     this.json = json || {}
     _.defaultsDeep(this.json, AppConfig.defaults)
 
@@ -35,6 +36,14 @@ class AppConfig {
     this.folders = this.json.folders.map(Folder.fromObject, this)
     this.providers = this.json.providers.map(StorageProvider.fromObject, this)
     this.queue = new Queue()
+
+    // listen for values changing, and automatically save the config file
+    for (const folder of this.folders) {
+      folder.on('value changed', this.save.bind(this))
+    }
+    for (const provider of this.providers) {
+      provider.on('value changed', this.save.bind(this))
+    }
   }
 
   hashUsingMasterKey () {
@@ -48,14 +57,14 @@ class AppConfig {
   }
 
   getProvidersForFolder (folder) {
-    return Object.keys(folder.providers).map((providerId) => {
+    return Object.keys(folder.get('providers')).map((providerId) => {
       return this.getProviderById(providerId)
     })
   }
 
   getFolderById (id) {
     for (const folder of this.folders) {
-      if (folder.id === id) {
+      if (folder.get('id') === id) {
         return folder
       }
     }
@@ -63,7 +72,7 @@ class AppConfig {
 
   getProviderById (id) {
     for (const provider of this.providers) {
-      if (provider.id === id) {
+      if (provider.get('id') === id) {
         return provider
       }
     }
@@ -71,13 +80,23 @@ class AppConfig {
 
   save () {
     return new Promise((resolve, reject) => {
+      debug('saving configuration file')
+
       // create the JSON object we'll be saving
+      const json = {
+        version: 1,
+        webserver: Object.assign({}, this.json.webserver),
+        folders: this.folders.map((folder) => folder.toJSON()),
+        providers: this.providers.map((provider) => provider.toJSON())
+      }
+
+      // convert to string
+      const data = JSON.stringify(json, null, 2)
 
       // save the config, first to a secondary file,
       // then we will replace the original. This way
       // we never risk losing encryption keys
-
-      cfs.writeFile()
+      cfs.writeFile(this.location, data).then(resolve, reject)
     })
   }
 
@@ -102,10 +121,10 @@ module.exports = function (mKey) {
   masterKey = mKey
 
   return new Promise((resolve, reject) => {
-    const configFilePath = path.join(os.homedir(), '.config/syncstuff/config.json')
-    debug('loading config from: %s', configFilePath)
+    const configFileLocation = path.join(os.homedir(), '.config/syncstuff/config.json')
+    debug('loading config from: %s', configFileLocation)
 
-    jsonfile.readFile(configFilePath, function (err, obj) {
+    jsonfile.readFile(configFileLocation, function (err, obj) {
       let config = null
 
       if (err) {
@@ -119,7 +138,7 @@ module.exports = function (mKey) {
         config = obj
       }
 
-      resolve(new AppConfig(config || AppConfig.defaults))
+      resolve(new AppConfig(config || AppConfig.defaults, configFileLocation))
     })
   })
 }

@@ -1,118 +1,106 @@
 const debug = require('../lib/debug')(__filename)
-const path = require('path')
 const StorageProvider = require('../lib/storage-provider')
 const AWS = require('aws-sdk')
 
 class BackendS3 extends StorageProvider {
-  init () {
-    this.config.bucket
-    this.config.encrypt = this.config.encrypt !== false
-    this.config.storageClass = 'standard' // REDUCED_REDUNDANCY | STANDARD_IA
+  static get defaultOptions () {
+    return {
+      storageClass: 'STANDARD', // REDUCED_REDUNDANCY | STANDARD_IA
+      region: 'us-east-1'
+    }
+  }
 
+  static get requiredOptions () {
+    return ['key', 'secret', 'bucket']
+  }
+
+  init () {
     this.s3 = new AWS.S3({
       apiVersion: 'latest',
-      accessKeyId: this.config.key,
-      secretAccessKey: this.config.secret,
-      region: this.config.region || 'us-east-1',
+      accessKeyId: this.option('key'),
+      secretAccessKey: this.option('secret'),
+      region: this.option('region'),
       sslEnabled: true,
       computeChecksums: true
     })
   }
 
-  fetch (file, folder) {
+  download (object) {
     return new Promise((resolve, reject) => {
-      debug('fetch: %s', file.abs)
-      Promise.resolve()
-        .then(() => file.getEncryptionKey())
-        .then((encKey) => {
-          const params = {
-            Bucket: this.config.bucket,
-            Key: path.join(folder.providers[this.id].path, file.name)
-            // IfModifiedSince: new Date(),
-          }
+      const params = {
+        Bucket: this.option('bucket'),
+        Key: object.key
+        // IfModifiedSince: new Date(),
+      }
 
-          this.s3.getObject(params, (err, data) => {
-            if (err) {
-              debug('fetch: failed')
-              return reject(err)
+      this.s3.getObject(params, (err, data) => {
+        if (err) {
+          return reject(err)
+        }
+
+        const writeStream = object.tempWriteStream()
+        writeStream.write(data.Body)
+        writeStream.end()
+        writeStream.on('finish', () => {
+          console.log(data)
+          resolve(data)
+        })
+      })
+    })
+  }
+
+  upload (object) {
+    return new Promise((resolve, reject) => {
+      object.checksum('md5', 'base64').then((md5sum) => {
+        const objectKey = object.key
+        debug('key: %s, md5sum: %s', objectKey, md5sum)
+        const params = {
+          ACL: 'private',
+          Body: object.stream,
+          Bucket: this.option('bucket'),
+          ContentEncoding: object.encoding,
+          ContentLength: object.size,
+          ContentMD5: md5sum,
+          ContentType: object.type,
+          Key: objectKey,
+          ServerSideEncryption: this.ifOption('encrypt') ? 'AES256' : null,
+          StorageClass: this.option('storageClass').toUpperCase(),
+
+          Metadata: {}
+          // ContentDisposition: 'STRING_VALUE',
+          // Tagging: 'STRING_VALUE',
+        }
+
+        // likely should consider moving to s3.upload for concurrency
+        // or to using MultiPartUploads so we can handle block-based uploads
+        this.s3.putObject(params, (err, data) => {
+          if (err) {
+            debug('putObject returned an error')
+            this.handleError(err, resolve, reject)
+          } else {
+            debug('putObject complete, etag: %s', data.ETag)
+            if (data.VersionId) {
+              debug('s3 version-id: %s', data.VersionId)
             }
-
-            console.log(data)
-            resolve(data)
-          })
-        })
-        .catch((err) => reject(err))
-    })
-  }
-
-  syncFile (file, folder) {
-    return new Promise((resolve, reject) => {
-      debug('syncing: %s', file.abs)
-      Promise.resolve()
-        .then(() => file.stat())
-        .then(() => file.getEncryptionKey())
-        .then((encKey) => file.encrypt(encKey))
-        .then(() => file.md5(file.stream, 'base64'))
-        .then((md5sum) => {
-          const key = path.join(folder.providers[this.id].path, file.relative)
-          debug('key: %s, md5sum: %s', key, md5sum)
-          const params = {
-            ACL: 'private',
-            Body: file.stream,
-            Bucket: this.config.bucket,
-            ContentEncoding: file.encoding,
-            ContentLength: file.tempfile ? file.tempfile.stats.size : file.stats.size,
-            ContentMD5: md5sum,
-            ContentType: file.type,
-            Key: key,
-            ServerSideEncryption: this.config.encrypt ? 'AES256' : null,
-            StorageClass: this.config.storageClass.toUpperCase(),
-
-            Metadata: {}
-            // ContentDisposition: 'STRING_VALUE',
-            // Tagging: 'STRING_VALUE',
+            resolve()
           }
-
-          // likely should consider moving to s3.upload for concurrency
-          // or to using MultiPartUploads so we can handle block-based uploads
-          this.s3.putObject(params, (err, data) => {
-            file.cleanupTempfile().then(() => {
-              if (err) {
-                debug('putObject returned an error')
-                this.handleError(err, resolve, reject)
-              } else {
-                debug('putObject complete, etag: %s', data.ETag)
-                if (data.VersionId) {
-                  debug('s3 version-id: %s', data.VersionId)
-                }
-                resolve()
-              }
-            })
-          })
         })
-        .catch((err) => reject(err))
+      })
     })
   }
 
-  removeFile (file, folder) {
+  removeFile (object) {
     return new Promise((resolve, reject) => {
-      debug('removing: %s', file.abs)
       const params = {
         Bucket: this.config.bucket,
-        Key: path.join(folder.providers[this.id].path, file.name)
+        Key: object.key
         // VersionId: 'STRING_VALUE'
       }
 
       this.s3.deleteObject(params, (err, data) => {
         if (err) {
-          debug('deleteObject returned an error')
-          // TODO: handle common delete errors
           reject(err)
         } else {
-          debug('deleteObject complete')
-          if (data.VersionId) {
-            debug('s3 version-id: %s', data.VersionId)
-          }
           resolve()
         }
       })

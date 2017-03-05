@@ -14,7 +14,7 @@ class FolderWatch {
     this.commitAllChanges = _.debounce(
       () => {
         let job = global.queue.create('commit', {
-          folderId: this.folder.id,
+          folderId: this.folder.get('id'),
           messageLines: this.commitMessage
         })
 
@@ -44,7 +44,7 @@ class FolderWatch {
     const path = this.folder.location
     this.debug('starting to watch: %s', path)
 
-    if (this.folder.options.globalIgnores) {
+    if (this.folder.ifOption('globalIgnores')) {
       this.debug('**globalIgnores are on for %s**', this.folder.name)
     }
 
@@ -59,13 +59,13 @@ class FolderWatch {
   }
 
   filter (file, stat) {
-    if (this.folder.options.ignoreHiddenFiles) {
+    if (this.folder.ifOption('ignoreHiddenFiles')) {
       if (path.basename(file).substr(0, 1) === '.') {
         return false
       }
     }
 
-    if (this.folder.options.globalIgnores) {
+    if (this.folder.ifOption('globalIgnores')) {
       let some = ignoreRules.matches.some((m) => {
         return m.match(file)
       })

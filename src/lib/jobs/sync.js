@@ -1,13 +1,12 @@
 const path = require('path')
 const debug = require('../debug')(__filename)
-const File = require('../file')
+const FileObject = require('../file')
 const walk = require('../walk')
 
 class SyncJob {
   constructor (folder) {
     this.folder = folder
-    this.ref = 'refs/heads/' + folder.git.branch
-    this.referenceFileObj = new File(this.ref, null, this.folder)
+    this.ref = path.join(this.folder.gitLocation, 'refs/heads/' + folder.git.branch)
   }
 
   run () {
@@ -27,7 +26,7 @@ class SyncJob {
     return walk(objectsDir).then(
       (files) => {
         this.files = files
-        this.files[ path.join(this.folder.gitLocation, this.ref) ] = null
+        this.files[this.ref] = null
         return this.files
       }
     )
@@ -41,9 +40,9 @@ class SyncJob {
 
   processStorageProvider (provider) {
     return new Promise((resolve, reject) => {
-      provider.fetch(this.referenceFileObj, this.folder).then(
+      const object = new FileObject(this.ref, null, this.folder, provider)
+      provider.getObject(object, this.folder).then(
         (data) => {
-          console.log('downloaded ref')
           // determine what needs to be uploaded baed on ref contents
         },
         (err) => {
@@ -85,26 +84,26 @@ class SyncJob {
 
   uploadFile (provider, filePath) {
     let stats = this.files[filePath]
-    let file = new File(filePath, stats, this.folder)
-    return provider.syncFile(file, this.folder)
-  }
-}
-
-function removeFile (path, stats) {
-  let file
-  if (this.cache[path] == null) {
-    file = new File(path, stats, this)
-    this.cache[path] = file
-  } else {
-    file = this.cache[path]
-    file.stats = stats
+    let file = new FileObject(filePath, stats, this.folder, provider)
+    return provider.putObject(file, this.folder)
   }
 
-  this.storageProviders.forEach((provider) => {
-    provider.removeFile(file, this).catch((err) => {
-      console.log('failed to remove file', err)
+  removeFile (path, stats) {
+    let file
+    if (this.cache[path] == null) {
+      file = new FileObject(path, stats, this)
+      this.cache[path] = file
+    } else {
+      file = this.cache[path]
+      file.stats = stats
+    }
+
+    this.storageProviders.forEach((provider) => {
+      provider.removeFile(file, this).catch((err) => {
+        console.log('failed to remove file', err)
+      })
     })
-  })
+  }
 }
 
 module.exports = function (job) {
