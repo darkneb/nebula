@@ -2,6 +2,7 @@ const path = require('path')
 const fs = require('graceful-fs')
 const checksum = require('./file/checksum')
 const Encryptor = require('./file/encryptor')
+const Tempfile = require('./file/tempfile')
 
 class File extends Encryptor {
   constructor (location, stats, folder, provider) {
@@ -60,7 +61,8 @@ class File extends Encryptor {
   }
 
   tempWriteStream () {
-    return this.tempfile.writeStream
+    this.writeTempFile = new Tempfile()
+    return this.writeTempFile.writeStream
   }
 
   get stream () {

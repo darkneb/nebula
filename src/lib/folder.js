@@ -93,6 +93,10 @@ class Folder extends BaseClass {
   get location () {
     let location = this.get('location')
 
+    if (!location) {
+      throw new Error('No location known for folder: ' + this.name)
+    }
+
     // replace ~ with user's home directory
     if (location.startsWith('~')) {
       return path.join(os.homedir(), location.substr(1))

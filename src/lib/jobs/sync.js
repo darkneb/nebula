@@ -44,6 +44,7 @@ class SyncJob {
       provider.getObject(object, this.folder).then(
         (data) => {
           // determine what needs to be uploaded baed on ref contents
+          console.log(data)
         },
         (err) => {
           if (err.code === 'NoSuchKey') {

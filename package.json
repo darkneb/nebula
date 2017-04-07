@@ -4,7 +4,7 @@
   "description": "Open source continuous file synchronization",
   "main": "src/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "NODE_ENV=test ./node_modules/mocha/bin/mocha --reporter spec --recursive"
   },
   "bin": {
     "syncstuff": "bin/syncstuff"
@@ -31,11 +31,12 @@
     "eslint-config-standard": "^6.2.1",
     "eslint-plugin-promise": "^3.4.2",
     "eslint-plugin-standard": "^2.0.1",
+    "grunt": "^0.4.5",
     "grunt-contrib-concat": "^0.5.1",
     "grunt-contrib-less": "^1.1.0",
     "grunt-contrib-uglify": "^0.11.0",
     "grunt-contrib-watch": "^0.6.1",
-    "grunt": "^0.4.5",
+    "mocha": "^3.2.0",
     "standard": "^8.6.0"
   }
 }
