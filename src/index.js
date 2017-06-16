@@ -4,6 +4,7 @@ const fs = require('graceful-fs')
 const opener = require('opener')
 
 const startConfig = require('./start/config')
+const startDatabase = require('./start/database')
 // const startIndexFolders = require('./start/index-folders')
 const startWebServer = require('./start/webserver')
 // const startWatch = require('./start/watch')
@@ -35,7 +36,8 @@ function main () {
       process.on('uncaughtException', triggerExit)
 
       // startup web server
-      startWebServer(appConfig)
+      let httpServer = startWebServer(appConfig)
+      startDatabase(httpServer)
 
       // start health checking folders
       for (const folder of appConfig.folders) {

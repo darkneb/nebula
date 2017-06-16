@@ -17,7 +17,7 @@ class AppConfig {
       webserver: {
         port: 55555,
         host: '127.0.0.1',
-        autoOpen: true
+        autoOpen: false
       },
       folders: [],
       providers: []

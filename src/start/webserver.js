@@ -1,6 +1,7 @@
 const debug = require('../lib/debug')(__filename)
 const path = require('path')
 const express = require('express')
+const Gun = require('gun')
 // const http = require('http')
 
 module.exports = function (appConfig) {
@@ -15,6 +16,9 @@ module.exports = function (appConfig) {
     debug('request: %s', req.url)
     next()
   })
+
+  // filter all gun requests
+  app.use(Gun.serve)
 
   // git security check, prevent file system traversing
   app.use('/git/:repo', function (req, res, next) {
@@ -61,8 +65,10 @@ module.exports = function (appConfig) {
   })
 
   // create node.js http server and listen on port
-  app.listen(appConfig.serverPort, () => {
+  let httpServer = app.listen(appConfig.serverPort, () => {
     debug('Server is now listening')
   })
+
+  return httpServer
   // http.createServer(app).listen(appConfig.serverPort)
 }
